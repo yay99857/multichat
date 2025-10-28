@@ -37,6 +37,16 @@ export class TwitchService {
   async start(): Promise<void> {
     this.client = new ChatClient({ channels: [this.channel] });
 
+    this.client.onConnect(() => {
+      console.log(`✅ Twitch: Connected to channel '${this.channel}'`);
+    });
+
+    this.client.onDisconnect((manually, reason) => {
+      if (!manually) {
+        console.log(`⚠️  Twitch: Disconnected - ${reason || "unknown reason"}`);
+      }
+    });
+
     this.client.onMessage((ch, user, text, msg) => {
       try {
         const parts = this.emotes.parseEmotes(text, msg.emoteOffsets);
@@ -53,7 +63,6 @@ export class TwitchService {
     });
 
     await this.client.connect();
-    console.log(`✅ Twitch: Connected to channel '${this.channel}'`);
   }
 
   private parseBadges(info?: Map<string, string>): Badge[] {

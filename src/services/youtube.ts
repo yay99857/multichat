@@ -23,6 +23,10 @@ export class YouTubeService {
 
     this.chat = new LiveChat(opts);
 
+    this.chat.on("start", () => {
+      console.log(`✅ YouTube: Live stream is active`);
+    });
+
     this.chat.on("chat", (item: any) => {
       try {
         const user = item.author?.name || "Unknown";
@@ -38,8 +42,14 @@ export class YouTubeService {
       } catch (err) {}
     });
 
-    this.chat.on("error", () => {});
-    this.chat.on("end", () => {});
+    this.chat.on("error", (err: any) => {
+      if (err?.message?.includes("Live Stream was not found")) {
+        console.log(`⚠️  YouTube: Live stream not found (channel offline)`);
+      }
+    });
+    this.chat.on("end", () => {
+      console.log(`⚠️  YouTube: Live stream ended`);
+    });
 
     await this.chat.start();
 
