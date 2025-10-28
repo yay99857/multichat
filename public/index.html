@@ -1,0 +1,227 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <title>Chat Overlay</title>
+        <style>
+            body {
+                background: #141414;
+                color: white;
+                font-family: sans-serif;
+                margin: 0;
+                padding: 20px;
+            }
+            #chat {
+                max-height: 90vh;
+                overflow-y: auto;
+            }
+            .message {
+                margin-bottom: 8px;
+                padding: 5px 10px;
+                border-radius: 4px;
+                background: rgba(0, 0, 0, 0.3);
+                animation: slideIn 0.3s ease-out;
+            }
+
+            @keyframes slideIn {
+                from {
+                    opacity: 0;
+                    transform: translateX(-20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateX(0);
+                }
+            }
+            .twitch {
+                border-left: 3px solid #9146ff;
+            }
+            .youtube {
+                border-left: 3px solid #ff0000;
+            }
+            .message-header {
+                display: inline;
+                white-space: nowrap;
+            }
+            .platform {
+                font-weight: bold;
+                margin-right: 5px;
+            }
+            .user {
+                font-weight: bold;
+                margin-right: 5px;
+            }
+            .badges {
+                display: inline-flex;
+                align-items: center;
+                margin-right: 5px;
+                gap: 4px;
+                vertical-align: middle;
+            }
+            .badge {
+                width: 18px;
+                height: 18px;
+                vertical-align: middle;
+            }
+            .text {
+                white-space: pre-wrap;
+                word-wrap: break-word;
+            }
+            .emote {
+                height: 28px;
+                vertical-align: middle;
+                margin: 0 2px;
+            }
+            .controls {
+                position: fixed;
+                top: 10px;
+                right: 10px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+            .status-indicator {
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background: #f44336;
+                transition: background 0.3s;
+            }
+            .status-indicator.connected {
+                background: #4caf50;
+            }
+            .clear-btn {
+                padding: 6px 12px;
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 4px;
+                color: white;
+                cursor: pointer;
+                font-size: 12px;
+                transition: all 0.2s;
+            }
+            .clear-btn:hover {
+                background: rgba(255, 255, 255, 0.2);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="controls">
+            <button class="clear-btn" id="clearBtn">Clear</button>
+            <div class="status-indicator" id="status"></div>
+        </div>
+        <div id="chat"></div>
+        <script>
+            const chat = document.getElementById("chat");
+            const status = document.getElementById("status");
+            let ws;
+
+            function connect() {
+                ws = new WebSocket("ws://localhost:3001");
+
+                ws.onopen = () => {
+                    status.className = "status-indicator connected";
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const msg = JSON.parse(event.data);
+                        const div = document.createElement("div");
+                        div.className = `message ${msg.platform}`;
+
+                        const headerSpan = document.createElement("span");
+                        headerSpan.className = "message-header";
+
+                        const platformSpan = document.createElement("span");
+                        platformSpan.className = "platform";
+                        platformSpan.textContent =
+                            msg.platform === "twitch" ? "📺" : "▶️";
+
+                        const badgesSpan = document.createElement("span");
+                        badgesSpan.className = "badges";
+
+                        if (msg.badges && Array.isArray(msg.badges)) {
+                            msg.badges.forEach((badge) => {
+                                const badgeImg = document.createElement("img");
+                                badgeImg.className = "badge";
+                                badgeImg.title = badge.name;
+                                badgeImg.src = badge.url;
+                                badgeImg.alt = badge.name;
+                                badgeImg.onerror = function () {
+                                    this.style.display = "none";
+                                };
+                                badgesSpan.appendChild(badgeImg);
+                            });
+                        }
+
+                        const userSpan = document.createElement("span");
+                        userSpan.className = "user";
+                        userSpan.textContent = `${msg.user}:`;
+
+                        headerSpan.appendChild(platformSpan);
+                        if (badgesSpan.children.length > 0) {
+                            headerSpan.appendChild(badgesSpan);
+                        }
+                        headerSpan.appendChild(userSpan);
+
+                        const textSpan = document.createElement("span");
+                        textSpan.className = "text";
+
+                        if (msg.parts && Array.isArray(msg.parts)) {
+                            msg.parts.forEach((part) => {
+                                if (part.type === "emote") {
+                                    const img = document.createElement("img");
+                                    img.src = part.url;
+                                    img.alt = part.name;
+                                    img.title = part.name;
+                                    img.className = "emote";
+                                    img.onerror = function () {
+                                        this.replaceWith(
+                                            document.createTextNode(part.name),
+                                        );
+                                    };
+                                    textSpan.appendChild(img);
+                                } else if (part.type === "text") {
+                                    textSpan.appendChild(
+                                        document.createTextNode(part.content),
+                                    );
+                                }
+                            });
+                        } else {
+                            textSpan.textContent = ` ${msg.text}`;
+                        }
+
+                        div.appendChild(headerSpan);
+                        div.appendChild(textSpan);
+
+                        chat.appendChild(div);
+                        chat.scrollTop = chat.scrollHeight;
+
+                        while (chat.children.length > 50) {
+                            chat.removeChild(chat.firstChild);
+                        }
+                    } catch (error) {
+                        console.error("Error parsing message:", error);
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    status.className = "status-indicator";
+                };
+
+                ws.onclose = () => {
+                    status.className = "status-indicator";
+                    setTimeout(connect, 3000);
+                };
+            }
+
+            document
+                .getElementById("clearBtn")
+                .addEventListener("click", () => {
+                    chat.innerHTML = "";
+                });
+
+            connect();
+        </script>
+    </body>
+</html>
