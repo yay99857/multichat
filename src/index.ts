@@ -178,6 +178,22 @@ wss.on("connection", (ws) => {
           }
         });
       }
+
+      if (clientMsg.type === "clear_chat") {
+        console.log(
+          "🗑️ Clear chat command received, broadcasting to all clients...",
+        );
+        const clearCommand = JSON.stringify({ type: "clear_chat" });
+        clients.forEach((client) => {
+          try {
+            if (client.readyState === 1) {
+              client.send(clearCommand);
+            }
+          } catch (err) {
+            clients.delete(client);
+          }
+        });
+      }
     } catch (err) {}
   });
 

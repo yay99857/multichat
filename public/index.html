@@ -206,11 +206,22 @@
                     try {
                         const msg = JSON.parse(event.data);
 
-                        // Verificar duplicatas usando timestamp se disponível
+                        if (msg.type === "clear_chat") {
+                            chat.innerHTML = "";
+                            messageIds.clear();
+                            recentMessages = [];
+                            historyLoaded = false;
+                            isLoadingHistory = false;
+                            firstMessageBeforeHistory = null;
+                            loadHistoryBtn.disabled = false;
+                            loadHistoryBtn.textContent = "📚 Load History";
+                            console.log("🗑️ Chat cleared by remote command");
+                            return;
+                        }
+
                         const msgFingerprint = `${msg.platform}_${msg.user}_${msg.text}`;
                         const msgTimestamp = msg.timestamp || Date.now();
 
-                        // Verificar se já existe uma mensagem idêntica recente (últimos 5 segundos)
                         const isDuplicate = recentMessages.some((recent) => {
                             return (
                                 recent.fingerprint === msgFingerprint &&
@@ -222,13 +233,11 @@
                             return;
                         }
 
-                        // Adicionar à lista de mensagens recentes
                         recentMessages.push({
                             fingerprint: msgFingerprint,
                             timestamp: msgTimestamp,
                         });
 
-                        // Manter apenas as últimas 100 mensagens para verificação
                         if (recentMessages.length > 100) {
                             recentMessages.shift();
                         }
@@ -331,7 +340,6 @@
                         div.appendChild(contentDiv);
 
                         if (isLoadingHistory) {
-                            // Inserir antes da referência fixa para manter ordem correta
                             if (firstMessageBeforeHistory) {
                                 chat.insertBefore(
                                     div,
@@ -370,7 +378,6 @@
                 loadHistoryBtn.disabled = true;
                 loadHistoryBtn.textContent = "⏳ Loading...";
                 isLoadingHistory = true;
-                // Guardar referência ao primeiro elemento atual
                 firstMessageBeforeHistory = chat.firstChild;
 
                 ws.send(
@@ -384,7 +391,6 @@
                     loadHistoryBtn.textContent = "✅ History Loaded";
                     isLoadingHistory = false;
                     firstMessageBeforeHistory = null;
-                    // Scroll suave para baixo para ver as mensagens mais recentes
                     chat.scrollTo({
                         top: chat.scrollHeight,
                         behavior: "smooth",
@@ -396,15 +402,19 @@
             document
                 .getElementById("clearBtn")
                 .addEventListener("click", () => {
-                    chat.innerHTML = "";
-                    messageIds.clear();
-                    recentMessages = [];
-                    historyLoaded = false;
-                    isLoadingHistory = false;
-                    firstMessageBeforeHistory = null;
-                    loadHistoryBtn.disabled = false;
-                    loadHistoryBtn.textContent = "📚 Load History";
-                    console.log("🗑️ Chat cleared");
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: "clear_chat" }));
+                    } else {
+                        chat.innerHTML = "";
+                        messageIds.clear();
+                        recentMessages = [];
+                        historyLoaded = false;
+                        isLoadingHistory = false;
+                        firstMessageBeforeHistory = null;
+                        loadHistoryBtn.disabled = false;
+                        loadHistoryBtn.textContent = "📚 Load History";
+                        console.log("🗑️ Chat cleared locally (not connected)");
+                    }
                 });
 
             connect();
