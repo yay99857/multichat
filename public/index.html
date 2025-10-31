@@ -17,6 +17,8 @@
                 overflow-y: auto;
                 overflow-x: hidden;
                 padding-bottom: 120px;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
             }
 
             /* Estilização do Scrollbar */
@@ -52,9 +54,15 @@
                 display: flex;
                 align-items: flex-start;
                 gap: 8px;
+                max-width: 100%;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
             }
             .message-content {
                 flex: 1;
+                min-width: 0;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
             }
             .timestamp {
                 font-size: 11px;
@@ -115,8 +123,11 @@
             .text {
                 white-space: pre-wrap;
                 word-wrap: break-word;
+                overflow-wrap: break-word;
+                word-break: break-word;
                 font-size: 14px;
                 line-height: 1.6;
+                max-width: 100%;
             }
             .emote {
                 height: 28px;
@@ -373,6 +384,11 @@
                     loadHistoryBtn.textContent = "✅ History Loaded";
                     isLoadingHistory = false;
                     firstMessageBeforeHistory = null;
+                    // Scroll suave para baixo para ver as mensagens mais recentes
+                    chat.scrollTo({
+                        top: chat.scrollHeight,
+                        behavior: "smooth",
+                    });
                 }, 2000);
 
                 console.log("📚 History requested");
