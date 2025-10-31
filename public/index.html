@@ -49,6 +49,18 @@
                 backdrop-filter: blur(4px);
                 animation: slideIn 0.3s ease-out;
                 line-height: 1.5;
+                display: flex;
+                align-items: flex-start;
+                gap: 8px;
+            }
+            .message-content {
+                flex: 1;
+            }
+            .timestamp {
+                font-size: 11px;
+                color: rgba(255, 255, 255, 0.5);
+                white-space: nowrap;
+                margin-top: 2px;
             }
 
             @keyframes slideIn {
@@ -159,7 +171,10 @@
             const loadHistoryBtn = document.getElementById("loadHistoryBtn");
             let ws;
             let messageIds = new Set();
+            let recentMessages = [];
             let historyLoaded = false;
+            let isLoadingHistory = false;
+            let firstMessageBeforeHistory = null;
 
             function connect() {
                 ws = new WebSocket("ws://localhost:3001");
@@ -180,15 +195,41 @@
                     try {
                         const msg = JSON.parse(event.data);
 
-                        const msgId = `${msg.platform}_${msg.user}_${msg.text}_${Date.now()}`;
+                        // Verificar duplicatas usando timestamp se disponível
+                        const msgFingerprint = `${msg.platform}_${msg.user}_${msg.text}`;
+                        const msgTimestamp = msg.timestamp || Date.now();
 
-                        if (messageIds.has(msgId)) {
+                        // Verificar se já existe uma mensagem idêntica recente (últimos 5 segundos)
+                        const isDuplicate = recentMessages.some((recent) => {
+                            return (
+                                recent.fingerprint === msgFingerprint &&
+                                Math.abs(recent.timestamp - msgTimestamp) < 5000
+                            );
+                        });
+
+                        if (isDuplicate) {
                             return;
                         }
+
+                        // Adicionar à lista de mensagens recentes
+                        recentMessages.push({
+                            fingerprint: msgFingerprint,
+                            timestamp: msgTimestamp,
+                        });
+
+                        // Manter apenas as últimas 100 mensagens para verificação
+                        if (recentMessages.length > 100) {
+                            recentMessages.shift();
+                        }
+
+                        const msgId = `${msgFingerprint}_${msgTimestamp}`;
                         messageIds.add(msgId);
 
                         const div = document.createElement("div");
                         div.className = `message ${msg.platform}`;
+
+                        const contentDiv = document.createElement("div");
+                        contentDiv.className = "message-content";
 
                         const headerSpan = document.createElement("span");
                         headerSpan.className = "message-header";
@@ -259,11 +300,39 @@
                             textSpan.textContent = ` ${msg.text}`;
                         }
 
-                        div.appendChild(headerSpan);
-                        div.appendChild(textSpan);
+                        contentDiv.appendChild(headerSpan);
+                        contentDiv.appendChild(textSpan);
 
-                        chat.appendChild(div);
-                        chat.scrollTop = chat.scrollHeight;
+                        const timestampSpan = document.createElement("span");
+                        timestampSpan.className = "timestamp";
+                        const msgTime = new Date(msg.timestamp || Date.now());
+                        const hours = msgTime
+                            .getHours()
+                            .toString()
+                            .padStart(2, "0");
+                        const minutes = msgTime
+                            .getMinutes()
+                            .toString()
+                            .padStart(2, "0");
+                        timestampSpan.textContent = `${hours}:${minutes}`;
+
+                        div.appendChild(timestampSpan);
+                        div.appendChild(contentDiv);
+
+                        if (isLoadingHistory) {
+                            // Inserir antes da referência fixa para manter ordem correta
+                            if (firstMessageBeforeHistory) {
+                                chat.insertBefore(
+                                    div,
+                                    firstMessageBeforeHistory,
+                                );
+                            } else {
+                                chat.appendChild(div);
+                            }
+                        } else {
+                            chat.appendChild(div);
+                            chat.scrollTop = chat.scrollHeight;
+                        }
 
                         while (chat.children.length > 50) {
                             chat.removeChild(chat.firstChild);
@@ -289,6 +358,9 @@
 
                 loadHistoryBtn.disabled = true;
                 loadHistoryBtn.textContent = "⏳ Loading...";
+                isLoadingHistory = true;
+                // Guardar referência ao primeiro elemento atual
+                firstMessageBeforeHistory = chat.firstChild;
 
                 ws.send(
                     JSON.stringify({
@@ -299,7 +371,9 @@
                 historyLoaded = true;
                 setTimeout(() => {
                     loadHistoryBtn.textContent = "✅ History Loaded";
-                }, 1000);
+                    isLoadingHistory = false;
+                    firstMessageBeforeHistory = null;
+                }, 2000);
 
                 console.log("📚 History requested");
             });
@@ -308,7 +382,10 @@
                 .addEventListener("click", () => {
                     chat.innerHTML = "";
                     messageIds.clear();
+                    recentMessages = [];
                     historyLoaded = false;
+                    isLoadingHistory = false;
+                    firstMessageBeforeHistory = null;
                     loadHistoryBtn.disabled = false;
                     loadHistoryBtn.textContent = "📚 Load History";
                     console.log("🗑️ Chat cleared");

@@ -32,8 +32,39 @@ async function loadMessages() {
   try {
     if (existsSync(MESSAGE_FILE)) {
       const data = await readFile(MESSAGE_FILE, "utf-8");
-      messageBuffer = JSON.parse(data);
+      const allMessages = JSON.parse(data);
+
+      if (allMessages.length === 0) {
+        messageBuffer = [];
+        return;
+      }
+
+      const now = Date.now();
+      const twelveHoursAgo = now - 12 * 60 * 60 * 1000;
+      const twoHoursAgo = now - 2 * 60 * 60 * 1000;
+
+      const lastMessage = allMessages[allMessages.length - 1];
+      const lastMessageTime = lastMessage.timestamp || 0;
+
+      if (lastMessageTime < twoHoursAgo) {
+        console.log(
+          `🗑️  Messages from past stream detected. Clearing history.`,
+        );
+        messageBuffer = [];
+        await saveMessages();
+        return;
+      }
+
+      messageBuffer = allMessages.filter((msg: ChatMessage) => {
+        return msg.timestamp && msg.timestamp > twelveHoursAgo;
+      });
+
+      const removedCount = allMessages.length - messageBuffer.length;
       console.log(`📚 ${messageBuffer.length} messages loaded from history`);
+      if (removedCount > 0) {
+        console.log(`🗑️  ${removedCount} old messages removed (>12h)`);
+        await saveMessages();
+      }
     }
   } catch (err) {
     console.error("❌ Error loading history:", err);
@@ -90,6 +121,8 @@ async function checkForUpdates() {
 }
 
 function broadcast(msg: ChatMessage) {
+  msg.timestamp = Date.now();
+
   messageBuffer.push(msg);
   if (messageBuffer.length > MAX_BUFFER_SIZE) {
     messageBuffer.shift();

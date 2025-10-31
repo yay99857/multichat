@@ -18,6 +18,7 @@ export interface ChatMessage {
   text: string;
   parts: MessagePart[];
   badges?: Badge[];
+  timestamp?: number;
 }
 
 export interface Config {
