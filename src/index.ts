@@ -10,6 +10,10 @@ import type { ChatMessage } from "./types";
 import { existsSync } from "fs";
 import { readFile, writeFile } from "fs/promises";
 import { join } from "path";
+import packageJson from "../package.json";
+
+const CURRENT_VERSION = packageJson.version;
+const GITHUB_REPO = "yay99857/multichat";
 
 const config = loadConfig();
 validateConfig(config);
@@ -45,6 +49,46 @@ async function saveMessages() {
   }
 }
 
+async function checkForUpdates() {
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
+      {
+        headers: {
+          "User-Agent": "Multichat-Overlay",
+        },
+      },
+    );
+
+    if (!response.ok) return;
+
+    const data = await response.json();
+    const latestVersion = data.tag_name?.replace(/^v/, "") || data.name;
+
+    if (latestVersion && latestVersion !== CURRENT_VERSION) {
+      const releaseUrl = `https://github.com/${GITHUB_REPO}/releases/latest`;
+      console.log(
+        "\n╔══════════════════════════════════════════════════════════╗",
+      );
+      console.log(
+        "║  🎉  NEW UPDATE AVAILABLE!                              ║",
+      );
+      console.log(
+        "╠══════════════════════════════════════════════════════════╣",
+      );
+      console.log(`║  Current: v${CURRENT_VERSION.padEnd(46)} ║`);
+      console.log(`║  Latest:  v${latestVersion.padEnd(46)} ║`);
+      console.log(
+        "╠══════════════════════════════════════════════════════════╣",
+      );
+      console.log(`║  ${releaseUrl.padEnd(54)} ║`);
+      console.log(
+        "╚══════════════════════════════════════════════════════════╝\n",
+      );
+    }
+  } catch (err) {}
+}
+
 function broadcast(msg: ChatMessage) {
   messageBuffer.push(msg);
   if (messageBuffer.length > MAX_BUFFER_SIZE) {
@@ -74,7 +118,8 @@ const app = new Elysia()
   }))
   .listen(config.server.httpPort);
 
-console.log(`✅ HTTP Server: http://localhost:${config.server.httpPort}`);
+console.log(`\nMultichat Overlay v${CURRENT_VERSION}`);
+console.log(`HTTP Server: http://localhost:${config.server.httpPort}`);
 
 const server = createServer();
 const wss = new WebSocketServer({ server });
@@ -108,10 +153,11 @@ wss.on("connection", (ws) => {
 });
 
 server.listen(config.server.wsPort || 3001);
-console.log(`✅ WebSocket: ws://localhost:${config.server.wsPort || 3001}`);
+console.log(`WebSocket: ws://localhost:${config.server.wsPort || 3001}`);
 
 async function init() {
   await loadMessages();
+  checkForUpdates();
 
   await emotes.initialize(config.twitch.channel);
 
