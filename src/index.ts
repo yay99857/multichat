@@ -7,6 +7,9 @@ import { EmoteService } from "./services/emotes";
 import { TwitchService } from "./services/twitch";
 import { YouTubeService } from "./services/youtube";
 import type { ChatMessage } from "./types";
+import { existsSync } from "fs";
+import { readFile, writeFile } from "fs/promises";
+import { join } from "path";
 
 const config = loadConfig();
 validateConfig(config);
@@ -14,10 +17,42 @@ validateConfig(config);
 const emotes = new EmoteService();
 const clients = new Set<any>();
 
+let messageBuffer: ChatMessage[] = [];
+const MAX_BUFFER_SIZE = 50;
+const MESSAGE_FILE = join(process.cwd(), "chat-history.json");
+
 let twitch: TwitchService | null = null;
 let youtube: YouTubeService | null = null;
 
+async function loadMessages() {
+  try {
+    if (existsSync(MESSAGE_FILE)) {
+      const data = await readFile(MESSAGE_FILE, "utf-8");
+      messageBuffer = JSON.parse(data);
+      console.log(`📚 ${messageBuffer.length} messages loaded from history`);
+    }
+  } catch (err) {
+    console.error("❌ Error loading history:", err);
+    messageBuffer = [];
+  }
+}
+
+async function saveMessages() {
+  try {
+    await writeFile(MESSAGE_FILE, JSON.stringify(messageBuffer, null, 2));
+  } catch (err) {
+    console.error("❌ Error saving history:", err);
+  }
+}
+
 function broadcast(msg: ChatMessage) {
+  messageBuffer.push(msg);
+  if (messageBuffer.length > MAX_BUFFER_SIZE) {
+    messageBuffer.shift();
+  }
+
+  saveMessages().catch((err) => console.error("Error saving message:", err));
+
   const data = JSON.stringify(msg);
   clients.forEach((ws) => {
     try {
@@ -46,6 +81,28 @@ const wss = new WebSocketServer({ server });
 
 wss.on("connection", (ws) => {
   clients.add(ws);
+
+  ws.on("message", (data) => {
+    try {
+      const clientMsg = JSON.parse(data.toString());
+
+      if (clientMsg.type === "request_history") {
+        console.log(
+          `📚 Client requested history. Sending ${messageBuffer.length} messages...`,
+        );
+        messageBuffer.forEach((msg) => {
+          try {
+            if (ws.readyState === 1) {
+              ws.send(JSON.stringify(msg));
+            }
+          } catch (err) {
+            console.error("Error sending history:", err);
+          }
+        });
+      }
+    } catch (err) {}
+  });
+
   ws.on("close", () => clients.delete(ws));
   ws.on("error", () => clients.delete(ws));
 });
@@ -54,6 +111,8 @@ server.listen(config.server.wsPort || 3001);
 console.log(`✅ WebSocket: ws://localhost:${config.server.wsPort || 3001}`);
 
 async function init() {
+  await loadMessages();
+
   await emotes.initialize(config.twitch.channel);
 
   if (config.twitch.enabled && config.twitch.channel) {
@@ -75,6 +134,9 @@ async function init() {
 }
 
 async function cleanup() {
+  console.log("💾 Saving history before shutdown...");
+  await saveMessages();
+
   if (twitch) await twitch.stop();
   if (youtube) await youtube.stop();
   clients.forEach((ws) => {

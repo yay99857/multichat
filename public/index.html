@@ -5,57 +5,94 @@
         <title>Chat Overlay</title>
         <style>
             body {
-                background: #141414;
+                background: #0e0e10;
                 color: white;
-                font-family: sans-serif;
+                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
                 margin: 0;
                 padding: 20px;
+                overflow: hidden;
             }
             #chat {
-                max-height: 90vh;
+                max-height: calc(100vh - 100px);
                 overflow-y: auto;
+                overflow-x: hidden;
+                padding-bottom: 120px;
+            }
+
+            /* Estilização do Scrollbar */
+            #chat::-webkit-scrollbar {
+                width: 8px;
+            }
+            #chat::-webkit-scrollbar-track {
+                background: rgba(0, 0, 0, 0.2);
+                border-radius: 4px;
+            }
+            #chat::-webkit-scrollbar-thumb {
+                background: rgba(255, 255, 255, 0.3);
+                border-radius: 4px;
+                transition: background 0.2s;
+            }
+            #chat::-webkit-scrollbar-thumb:hover {
+                background: rgba(255, 255, 255, 0.5);
+            }
+
+            /* Firefox */
+            #chat {
+                scrollbar-width: thin;
+                scrollbar-color: rgba(255, 255, 255, 0.3) rgba(0, 0, 0, 0.2);
             }
             .message {
-                margin-bottom: 8px;
-                padding: 5px 10px;
-                border-radius: 4px;
-                background: rgba(0, 0, 0, 0.3);
+                margin-bottom: 6px;
+                padding: 6px 12px;
+                border-radius: 6px;
+                background: rgba(0, 0, 0, 0.6);
+                backdrop-filter: blur(4px);
                 animation: slideIn 0.3s ease-out;
+                line-height: 1.5;
             }
 
             @keyframes slideIn {
                 from {
                     opacity: 0;
-                    transform: translateX(-20px);
+                    transform: translateY(10px);
                 }
                 to {
                     opacity: 1;
-                    transform: translateX(0);
+                    transform: translateY(0);
                 }
             }
             .twitch {
-                border-left: 3px solid #9146ff;
+                border-left: 2px solid #9146ff;
             }
             .youtube {
-                border-left: 3px solid #ff0000;
+                border-left: 2px solid #ff0000;
             }
             .message-header {
                 display: inline;
                 white-space: nowrap;
             }
             .platform {
-                font-weight: bold;
-                margin-right: 5px;
+                font-weight: 600;
+                margin-right: 6px;
+                font-size: 14px;
+            }
+            .platform-icon {
+                width: 20px;
+                height: 20px;
+                vertical-align: middle;
+                margin-right: 4px;
             }
             .user {
-                font-weight: bold;
-                margin-right: 5px;
+                font-weight: 600;
+                margin-right: 6px;
+                font-size: 15px;
+                text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
             }
             .badges {
                 display: inline-flex;
                 align-items: center;
-                margin-right: 5px;
-                gap: 4px;
+                margin-right: 6px;
+                gap: 3px;
                 vertical-align: middle;
             }
             .badge {
@@ -66,66 +103,90 @@
             .text {
                 white-space: pre-wrap;
                 word-wrap: break-word;
+                font-size: 14px;
+                line-height: 1.6;
             }
             .emote {
                 height: 28px;
                 vertical-align: middle;
                 margin: 0 2px;
             }
-            .controls {
+            .chat-controls {
                 position: fixed;
-                top: 10px;
-                right: 10px;
+                bottom: 20px;
+                right: 20px;
                 display: flex;
-                align-items: center;
                 gap: 10px;
+                z-index: 1000;
             }
-            .status-indicator {
-                width: 10px;
-                height: 10px;
-                border-radius: 50%;
-                background: #f44336;
-                transition: background 0.3s;
-            }
-            .status-indicator.connected {
-                background: #4caf50;
-            }
-            .clear-btn {
-                padding: 6px 12px;
-                background: rgba(255, 255, 255, 0.1);
+            .chat-btn {
+                padding: 8px 16px;
+                background: rgba(0, 0, 0, 0.6);
+                backdrop-filter: blur(4px);
                 border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 4px;
+                border-radius: 6px;
                 color: white;
                 cursor: pointer;
-                font-size: 12px;
+                font-size: 13px;
+                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
                 transition: all 0.2s;
+                opacity: 0.7;
             }
-            .clear-btn:hover {
-                background: rgba(255, 255, 255, 0.2);
+            .chat-btn:hover {
+                background: rgba(0, 0, 0, 0.8);
+                opacity: 1;
+                transform: scale(1.05);
+            }
+            .chat-btn:disabled {
+                opacity: 0.3;
+                cursor: not-allowed;
+            }
+            .chat-btn:disabled:hover {
+                transform: none;
             }
         </style>
     </head>
     <body>
-        <div class="controls">
-            <button class="clear-btn" id="clearBtn">Clear</button>
-            <div class="status-indicator" id="status"></div>
-        </div>
         <div id="chat"></div>
+        <div class="chat-controls">
+            <button class="chat-btn" id="loadHistoryBtn">
+                📚 Load History
+            </button>
+            <button class="chat-btn" id="clearBtn">🗑️ Clear</button>
+        </div>
         <script>
             const chat = document.getElementById("chat");
-            const status = document.getElementById("status");
+            const loadHistoryBtn = document.getElementById("loadHistoryBtn");
             let ws;
+            let messageIds = new Set();
+            let historyLoaded = false;
 
             function connect() {
                 ws = new WebSocket("ws://localhost:3001");
 
                 ws.onopen = () => {
-                    status.className = "status-indicator connected";
+                    console.log("WebSocket connected");
+                    ws.send(
+                        JSON.stringify({
+                            type: "client_ready",
+                            messageCount: historyLoaded
+                                ? chat.children.length
+                                : 999,
+                        }),
+                    );
                 };
 
                 ws.onmessage = (event) => {
                     try {
                         const msg = JSON.parse(event.data);
+
+                        const msgId = `${msg.platform}_${msg.user}_${msg.text}_${Date.now()}`;
+
+                        if (messageIds.has(msgId)) {
+                            return;
+                        }
+                        messageIds.add(msgId);
+
                         const div = document.createElement("div");
                         div.className = `message ${msg.platform}`;
 
@@ -134,8 +195,15 @@
 
                         const platformSpan = document.createElement("span");
                         platformSpan.className = "platform";
-                        platformSpan.textContent =
-                            msg.platform === "twitch" ? "📺" : "▶️";
+
+                        const platformIcon = document.createElement("img");
+                        platformIcon.className = "platform-icon";
+                        platformIcon.src =
+                            msg.platform === "twitch"
+                                ? "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAACVklEQVR4nO3ZTWvUQBgH8Kw3/QB+BPEjiCcP4smDL+yMilQvQi8KKoigk+lBwVIVRUV6EAoVrIpXtbiyfRJb292ttGqx0FoE15e2W1vMZpsNlEciGDfrJms2s00D84fn9kxmfiQz2SWKIiMjIyOzkcMp7GEUXsRb2tWIDEypVMupVMM4ixHIRrsbRNsXN0KNDsEUI5D/c7H+K29xdLC4bvXk9gcxkPq7kRmYQ9u2163yL7+IgHjvRmIh7JC+v/45TSAEUyqFicRDOB060OjkSByEEXjWKsQ0LJx89d0tv76ZyZLbs/it3DZItlXI4lfDM8av717XhNvjLNiWkIBIiC0hKCFBkRBbQlBC2gWpVm1cLplu+fX9XKm4PRXTatiTeTgXH0RUTeXmseuI/nd+ApnEQT5N/8BLHcM1c0OFE31HoiDzRQO7T7yufaTWnL/coRFxQpZLJt44lfPOS7STLSHigpiGhb0X3tQjelpGBEFuncnjg2vvfetp34zvQj/PruDA9SnfsXfOFTxzMQKPOcdNbYE0KwfaCDE9voCXj9du3uBiVBvjewtbIiFEQ8YGi95jtBmCwEd+dHhrZIQoiGVV8Xn/bNhrlDjVtglBiICUjVW83/0u1FhGtFVOYacwRFTI0kIZ754fD4mANUbgoCI6Khk6qxLobVbOd4vaBTkvsp7O0QabF5YCr5WGY8IRocBUT//X5j2c3a5s5KjNISPCTqD4IPDodHpks5KEqH4QAjcjv5XjhDAK1YtE71CSFk703SqFglO/f1ZQfVfca5KRkVH+yS9n7V368ldNUgAAAABJRU5ErkJggg=="
+                                : "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAACLElEQVR4nO2ZMUwUQRSGf6QxNga1I0ahVaDCXHLv7cWA0Ngi3VkBBYWdFhTQqNcJNgQ0NhbGQhNCAcTEQiCh8io1gWBMKAgYCwjEQpPf3LJHgeDO3u5wm3W+5DWbTeb/MrO7s28Ah8PhcDgctcMcLjCPDip6qeinYoiCB1SUgnpKxdSRqlwrUfDYv1cwSA93qOihhzYKmuyEBc5QcYOCEQqeU7BAwWcq9qmglRLsUfGJgvlgzBE/A9BQm4SglYJla4Gj1xIVLVElmij4moLwPFLf2IWL5iIHa7neoXnC0huP8lxs1z2wnlhblYzhIjk0pyAsQ+pyuIgHTUFQ/rM83AwXyaMYa5Bb58ius3ZFBAPhIoLRWIMUr5HbG+TDok2ZkonIZGyRKh/fk3fbbIi8ChdRvExMpMLvX+TMFHn7UpIi70xm5E2iIlV2fpAT98hCYxIiZRORBSsiVVbL5LDGExGsmSytJasiVZZnyb4rtYpsmIiUT0Wkws998sVY9Ne14HtWRDazsrS+ZONhV6yYzMjb1L9+BfPZ+CAKXmdlizKdlU3jWDa28XkUTUTEaohkRCQbv7o5NJs2H7bqHlZjNh98GcVECgLz2BI8MZI4bNAp1useWmM26IJZaaFiMUUz8YEFXI0kcSgDNNBDZ9DEfkbFnN9gVuyeahPbQ2fNTexQyW6cZwHXKeimoM8/IhDcp+BRcHQw/texwsG1448VBO3WjhUcDofD4fhf+AObmnc/bHND9QAAAABJRU5ErkJggg==";
+                        platformIcon.alt = msg.platform;
+                        platformSpan.appendChild(platformIcon);
 
                         const badgesSpan = document.createElement("span");
                         badgesSpan.className = "badges";
@@ -199,6 +267,7 @@
 
                         while (chat.children.length > 50) {
                             chat.removeChild(chat.firstChild);
+                            messageIds.delete(messageIds.values().next().value);
                         }
                     } catch (error) {
                         console.error("Error parsing message:", error);
@@ -206,19 +275,43 @@
                 };
 
                 ws.onerror = (error) => {
-                    status.className = "status-indicator";
+                    console.error("WebSocket error:", error);
                 };
 
                 ws.onclose = () => {
-                    status.className = "status-indicator";
+                    console.log("WebSocket closed, reconnecting...");
                     setTimeout(connect, 3000);
                 };
             }
 
+            loadHistoryBtn.addEventListener("click", () => {
+                if (historyLoaded) return;
+
+                loadHistoryBtn.disabled = true;
+                loadHistoryBtn.textContent = "⏳ Loading...";
+
+                ws.send(
+                    JSON.stringify({
+                        type: "request_history",
+                    }),
+                );
+
+                historyLoaded = true;
+                setTimeout(() => {
+                    loadHistoryBtn.textContent = "✅ History Loaded";
+                }, 1000);
+
+                console.log("📚 History requested");
+            });
             document
                 .getElementById("clearBtn")
                 .addEventListener("click", () => {
                     chat.innerHTML = "";
+                    messageIds.clear();
+                    historyLoaded = false;
+                    loadHistoryBtn.disabled = false;
+                    loadHistoryBtn.textContent = "📚 Load History";
+                    console.log("🗑️ Chat cleared");
                 });
 
             connect();

@@ -44,11 +44,11 @@ export class YouTubeService {
 
     this.chat.on("error", (err: any) => {
       if (err?.message?.includes("Live Stream was not found")) {
-        console.log(`⚠️  YouTube: Live stream not found (channel offline)`);
+        console.log(`⚠️  YouTube: Live stream not found (offline)`);
       }
     });
     this.chat.on("end", () => {
-      console.log(`⚠️  YouTube: Live stream ended`);
+      console.log(`⚠️  YouTube: Stream ended`);
     });
 
     await this.chat.start();
